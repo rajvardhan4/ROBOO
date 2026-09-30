@@ -421,6 +421,7 @@ class Api:
         self._window.toggle_fullscreen()
 
     def win_close(self):
+        self._closed = True          # stop pushing events into a window being torn down
         self._window.destroy()
 
 
@@ -454,6 +455,7 @@ def main():
     api._window = window
     window.events.shown += lambda: threading.Timer(0.2, _fill_work_area).start()
     window.events.closing += lambda: setattr(api, "_closed", True)
+    window.events.closed += lambda: setattr(api, "_closed", True)
     webview.start(http_server=True, debug=bool(os.environ.get("ROBOO_DEBUG")))
 
 
