@@ -1,4 +1,4 @@
-# NEXUS — your own holographic AI assistant
+# ROBOO — your own holographic AI assistant
 
 A JARVIS-style desktop assistant for Windows with a fully animated sci-fi HUD. Name it anything you
 like, plug in **any** AI provider's API key, and talk to it or type to it. It answers out loud and
