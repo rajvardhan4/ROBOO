@@ -1,4 +1,4 @@
-# NEXUS - Python dependencies (Windows 10/11, Python 3.11+)
+# ROBOO - Python dependencies (Windows 10/11, Python 3.11+)
 
 # Window + holographic UI (Edge WebView2, ships with Windows 11)
 pywebview>=5

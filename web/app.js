@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   NEXUS — app logic: boot, bridge to Python, chat, voice, setup
+   ROBOO — app logic: boot, bridge to Python, chat, voice, setup
    ═══════════════════════════════════════════════════════════════ */
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -76,7 +76,7 @@ const NX = {
     const chat = $("chat");
     const m = document.createElement("div");
     m.className = `msg ${role}`;
-    const who = role === "user" ? (this.st?.config.user_name || "YOU") : (this.st?.config.nickname || "NEXUS");
+    const who = role === "user" ? (this.st?.config.user_name || "YOU") : (this.st?.config.nickname || "ROBOO");
     const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     m.innerHTML = `<div class="meta">${esc(who.toUpperCase())} // ${time}${source === "voice" ? " // VOICE" : ""}</div><div class="body"></div>`;
     chat.appendChild(m);
@@ -242,7 +242,7 @@ const NX = {
     const c = st.config;
     document.documentElement.dataset.theme = c.theme || "cyan";
     HUD.refreshTheme();
-    const nick = (c.nickname || "NEXUS").toUpperCase();
+    const nick = (c.nickname || "ROBOO").toUpperCase();
     HUD.S.nick = nick; document.title = nick;
     const bn = $("brandName"); bn.textContent = nick; bn.dataset.text = nick;
     const p = st.presets[c.provider];
@@ -255,7 +255,7 @@ const NX = {
 
   ticker() {
     const c = this.st?.config || {};
-    const items = [`${(c.nickname || "NEXUS").toUpperCase()} ONLINE`, `PROVIDER ${String(c.provider || "none").toUpperCase()}`, `MODEL ${c.model || "-"}`,
+    const items = [`${(c.nickname || "ROBOO").toUpperCase()} ONLINE`, `PROVIDER ${String(c.provider || "none").toUpperCase()}`, `MODEL ${c.model || "-"}`,
       `VOICE ${c.voice || "-"}`, `SKILLS ${this.st?.tools?.length || 0}`, "CTRL+SPACE = TALK", "ENTER = EXECUTE", "ESC = STOP SPEAKING",
       ...Array.from({ length: 4 }, () => "0x" + Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase().padStart(6, "0"))];
     const s = items.join("   ◆   ") + "   ◆   ";

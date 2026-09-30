@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   NEXUS HUD — canvas renderers (one requestAnimationFrame loop)
+   ROBOO HUD — canvas renderers (one requestAnimationFrame loop)
    Everything that moves here is driven by real state: the assistant's
    voice (Web Audio analyser), the mic level, the machine's load.
    ═══════════════════════════════════════════════════════════════ */
@@ -8,7 +8,7 @@ const HUD = (() => {
   // ?soft=1 renders canvases on the CPU - only for headless screenshot previews.
   const SOFT = new URLSearchParams(location.search).has("soft");
   const S = {                    // live state, written by app.js
-    state: "IDLE", nick: "NEXUS",
+    state: "IDLE", nick: "ROBOO",
     amp: 0, mic: 0, freq: null,  // freq: Uint8Array from the analyser while speaking
     stats: { cpu: 0, ram: 0, disk: 0, battery: null, cores: [], up: 0, down: 0 },
   };

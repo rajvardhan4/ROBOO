@@ -1,5 +1,5 @@
 """
-NEXUS - a personal AI assistant with a holographic HUD.
+ROBOO - a personal AI assistant with a holographic HUD.
 
 Python runs the brain (any AI provider + tools + voice); the interface is an
 HTML/Canvas page rendered by Edge WebView2 through pywebview. The two talk
@@ -28,11 +28,11 @@ import webview
 from core import config, memory, providers, tools, voice
 from core.config import BASE_DIR
 
-APP_NAME = "NEXUS"
+APP_NAME = "ROBOO"
 
 
 def system_prompt(cfg: dict) -> str:
-    nick = cfg.get("nickname") or "Nexus"
+    nick = cfg.get("nickname") or "Roboo"
     user = cfg.get("user_name") or "the user"
     return f"""You are {nick}, a personal AI assistant that lives on {user}'s Windows computer - \
 in the spirit of JARVIS: calm, sharp, a little witty and completely dependable.
@@ -390,7 +390,7 @@ class Api:
         h = time.localtime().tm_hour
         part = "morning" if h < 12 else "afternoon" if h < 17 else "evening"
         user = cfg.get("user_name") or ""
-        text = f"Good {part}{', ' + user if user else ''}. {cfg.get('nickname') or 'Nexus'} " \
+        text = f"Good {part}{', ' + user if user else ''}. {cfg.get('nickname') or 'Roboo'} " \
                f"online. All systems nominal."
         threading.Thread(target=self._assistant.say, args=(text,), daemon=True).start()
 
@@ -454,7 +454,7 @@ def main():
     api._window = window
     window.events.shown += lambda: threading.Timer(0.2, _fill_work_area).start()
     window.events.closing += lambda: setattr(api, "_closed", True)
-    webview.start(http_server=True, debug=bool(os.environ.get("NEXUS_DEBUG")))
+    webview.start(http_server=True, debug=bool(os.environ.get("ROBOO_DEBUG")))
 
 
 if __name__ == "__main__":
