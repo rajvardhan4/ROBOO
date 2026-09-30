@@ -1,0 +1,26 @@
+# NEXUS - Python dependencies (Windows 10/11, Python 3.11+)
+
+# Window + holographic UI (Edge WebView2, ships with Windows 11)
+pywebview>=5
+
+# AI providers: Claude uses the official SDK; Gemini and every
+# OpenAI-compatible provider are called over plain HTTPS.
+anthropic>=1
+requests>=2.31
+
+# Voice
+sounddevice>=0.4
+numpy>=1.24
+SpeechRecognition>=3.10     # speech -> text (free Google recogniser, no key)
+edge-tts>=6.1               # text -> speech (Microsoft neural voices, no key)
+
+# Skills
+psutil>=5.9
+pyautogui
+pyperclip
+ddgs                        # web search
+yt-dlp                      # find YouTube videos
+mss                         # screenshots
+pillow
+pycaw; sys_platform == "win32"
+comtypes; sys_platform == "win32"

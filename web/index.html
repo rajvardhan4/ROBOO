@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en" data-theme="cyan">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXUS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="fx-scan"></div>
+<div class="fx-vignette"></div>
+
+<!-- ═════════ BOOT ═════════ -->
+<section id="boot">
+  <canvas id="bootRings"></canvas>
+  <div class="boot-box">
+    <div class="boot-title" data-text="NEXUS">NEXUS</div>
+    <div class="boot-sub">PERSONAL NEURAL INTERFACE</div>
+    <pre id="bootLog"></pre>
+    <div class="boot-bar"><i id="bootFill"></i></div>
+    <div class="boot-pct"><span id="bootPct">0</span>%</div>
+  </div>
+</section>
+
+<!-- ═════════ MAIN HUD ═════════ -->
+<main id="app">
+  <header class="topbar pywebview-drag-region">
+    <div class="brand">
+      <svg class="emblem" viewBox="0 0 60 60">
+        <polygon class="e1" points="30,3 54,16.5 54,43.5 30,57 6,43.5 6,16.5"/>
+        <polygon class="e2" points="30,12 46,21 46,39 30,48 14,39 14,21"/>
+        <circle class="e3" cx="30" cy="30" r="6"/>
+      </svg>
+      <div>
+        <div id="brandName" class="glitch" data-text="NEXUS">NEXUS</div>
+        <div class="brand-sub">NEURAL INTERFACE <span class="sep">//</span> <span id="brandModel">OFFLINE</span></div>
+      </div>
+    </div>
+    <div class="notch">
+      <div id="clock">00:00:00</div>
+      <div id="date">---</div>
+    </div>
+    <div class="top-right">
+      <div class="chip" id="chipAI"><i></i><span>AI LINK</span></div>
+      <div class="chip" id="chipMic"><i></i><span>MIC</span></div>
+      <div class="chip" id="chipNet"><i></i><span>NET</span></div>
+      <div class="winbtns">
+        <button onclick="NX.win('minimize')" title="Minimize">&#x2212;</button>
+        <button onclick="NX.win('maximize')" title="Fullscreen">&#x25A2;</button>
+        <button class="x" onclick="NX.win('close')" title="Close">&#x2715;</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- LEFT -->
+  <aside class="col left">
+    <div class="panel" style="--d:1">
+      <div class="ph"><b>SYSTEM CORE</b><em>SYS.01</em></div>
+      <div class="gauges">
+        <div class="gauge"><canvas data-g="cpu"></canvas><label>CPU</label></div>
+        <div class="gauge"><canvas data-g="ram"></canvas><label>RAM</label></div>
+        <div class="gauge"><canvas data-g="disk"></canvas><label>DISK</label></div>
+        <div class="gauge"><canvas data-g="battery"></canvas><label>PWR</label></div>
+      </div>
+      <div class="readouts">
+        <div><span>MEMORY</span><b id="rRam">-- / -- GB</b></div>
+        <div><span>PROCESSES</span><b id="rProcs">--</b></div>
+        <div><span>UPTIME</span><b id="rUp">--</b></div>
+      </div>
+    </div>
+    <div class="panel" style="--d:2">
+      <div class="ph"><b>CORE THREADS</b><em>CPU.MX</em></div>
+      <canvas id="cores" class="fill"></canvas>
+    </div>
+    <div class="panel" style="--d:3">
+      <div class="ph"><b>DATA STREAM</b><em>NET.IO</em></div>
+      <canvas id="net" class="fill"></canvas>
+      <div class="readouts two">
+        <div><span>&#x25B2; UP</span><b id="rUpS">0 KB/s</b></div>
+        <div><span>&#x25BC; DOWN</span><b id="rDown">0 KB/s</b></div>
+      </div>
+    </div>
+    <div class="panel grow" style="--d:4">
+      <div class="ph"><b>GLOBAL LINK</b><em>GEO.SAT</em></div>
+      <canvas id="globe" class="fill"></canvas>
+    </div>
+  </aside>
+
+  <!-- CENTER -->
+  <section class="center">
+    <canvas id="reactor"></canvas>
+    <div class="state-wrap">
+      <div id="stateText" class="state">STANDBY</div>
+      <div id="subtitle" class="subtitle"></div>
+    </div>
+    <!-- voice first: the big mic is the main control -->
+    <div class="voicebar">
+      <div class="vb-side left"><span>CTRL</span><b>+</b><span>SPACE</span></div>
+      <button id="micBtn" class="mic" title="Talk (Ctrl+Space)">
+        <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12z"/></svg>
+        <span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span>
+        <svg class="orbit" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47"/></svg>
+      </button>
+      <div class="vb-side right"><span id="micLabel">TAP TO SPEAK</span></div>
+    </div>
+    <!-- chat box: secondary -->
+    <div class="cmdbar">
+      <div class="inputwrap">
+        <span class="prompt">&gt;_</span>
+        <input id="cmd" placeholder="Or type here..." autocomplete="off" spellcheck="false">
+      </div>
+      <button id="sendBtn" class="send" title="Send (Enter)">&#x27A4;</button>
+    </div>
+  </section>
+
+  <!-- RIGHT -->
+  <aside class="col right">
+    <div class="panel chatp" style="--d:2">
+      <div class="ph"><b>COMMS LOG</b><em>LNK.TX</em><button class="mini" onclick="NX.clearChat()">RESET</button></div>
+      <div id="chat" class="chat"></div>
+    </div>
+    <div class="panel" style="--d:3">
+      <div class="ph"><b>TASK MATRIX</b><em>EXE.Q</em></div>
+      <div id="tasks" class="tasks"><div class="empty">NO ACTIVE TASKS</div></div>
+    </div>
+    <div class="panel intelp" style="--d:4">
+      <div class="ph"><b>INTEL FEED</b><em>INT.RX</em></div>
+      <div id="intel" class="intel"><canvas id="radar" class="fill"></canvas><div id="intelCards"></div></div>
+    </div>
+  </aside>
+
+  <footer class="bottombar">
+    <div class="ticker"><div id="ticker"></div></div>
+    <canvas id="wave"></canvas>
+    <div class="foot-btns">
+      <button onclick="NX.openMemory()">&#x25C8; MEMORY</button>
+      <button onclick="NX.openSettings()">&#x2699; SETTINGS</button>
+    </div>
+  </footer>
+</main>
+
+<!-- ═════════ SETUP / SETTINGS ═════════ -->
+<section id="setup" class="overlay">
+  <canvas id="setupRings"></canvas>
+  <div class="setup-card">
+    <div class="corners"><i></i><i></i><i></i><i></i></div>
+    <div class="setup-head">
+      <div class="kicker" id="setupKicker">FIRST BOOT // SYSTEM INITIALIZATION</div>
+      <div class="preview glitch" id="nickPreview" data-text="YOUR AI">YOUR AI</div>
+      <div class="kicker dim">Name your assistant, connect any AI, and bring it online.</div>
+    </div>
+    <div class="form">
+      <label class="f span2">ASSISTANT NICKNAME
+        <input id="fNick" maxlength="24" placeholder="e.g. JARVIS, FRIDAY, NOVA, EDITH">
+      </label>
+      <label class="f span2">YOUR NAME
+        <input id="fUser" maxlength="32" placeholder="What should it call you?">
+      </label>
+      <label class="f span2">API KEY <span id="detectBadge" class="badge"></span>
+        <div class="keyrow">
+          <input id="fKey" type="password" placeholder="Paste any AI API key - Claude, Gemini, OpenAI, Groq, OpenRouter...">
+          <button type="button" class="ghost" onclick="NX.toggleKey()">SHOW</button>
+        </div>
+      </label>
+      <label class="f">AI PROVIDER
+        <select id="fProvider"></select>
+      </label>
+      <label class="f">MODEL
+        <div class="keyrow">
+          <input id="fModel" list="modelList" placeholder="model id">
+          <button type="button" class="ghost" id="scanBtn" onclick="NX.scanModels()">SCAN</button>
+        </div>
+        <datalist id="modelList"></datalist>
+      </label>
+      <label class="f span2" id="baseRow">ENDPOINT URL
+        <input id="fBase" placeholder="https://.../v1">
+      </label>
+      <label class="f">VOICE
+        <select id="fVoice"></select>
+      </label>
+      <label class="f">SPEECH LANGUAGE
+        <select id="fLang"></select>
+      </label>
+      <div class="f span2 settings-only">THEME
+        <div class="themes" id="themes"></div>
+      </div>
+      <div class="f span2 settings-only toggles">
+        <label class="tog"><input type="checkbox" id="fVoiceOn"><span></span>SPEAK REPLIES</label>
+        <label class="tog"><input type="checkbox" id="fAuto"><span></span>ALWAYS LISTENING</label>
+      </div>
+    </div>
+    <div id="setupMsg" class="setup-msg"></div>
+    <div class="setup-actions">
+      <button class="ghost settings-only" onclick="NX.closeSettings()">CANCEL</button>
+      <button class="ghost" id="saveAnyway" style="display:none" onclick="NX.activate(false)">SAVE ANYWAY</button>
+      <button class="primary" id="activateBtn" onclick="NX.activate(true)"><span>ACTIVATE</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ CONFIRM ═════════ -->
+<section id="confirm" class="overlay">
+  <div class="confirm-card">
+    <div class="warn-ico">&#x26A0;</div>
+    <div class="confirm-title" id="cTitle">CONFIRM</div>
+    <pre class="confirm-detail" id="cDetail"></pre>
+    <div class="confirm-note">Your assistant wants to do this. It will only happen if YOU press Authorize.</div>
+    <div class="setup-actions">
+      <button class="ghost" onclick="NX.answer(false)">DENY</button>
+      <button class="primary danger" onclick="NX.answer(true)"><span>AUTHORIZE</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ MEMORY ═════════ -->
+<section id="memory" class="overlay">
+  <div class="memory-card">
+    <div class="ph"><b>MEMORY BANK</b><em>MEM.LT</em><button class="mini" onclick="NX.closeMemory()">CLOSE</button></div>
+    <div class="kicker dim">Everything your assistant remembers about you. Delete anything.</div>
+    <div id="memList" class="memlist"></div>
+  </div>
+</section>
+
+<div id="toasts"></div>
+
+<script src="hud.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
