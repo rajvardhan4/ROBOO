@@ -25,7 +25,7 @@ os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
 import psutil
 import webview
 
-from core import config, memory, providers, tools, voice
+from core import config, fast, memory, providers, tools, voice
 from core.config import BASE_DIR
 
 APP_NAME = "ROBOO"
@@ -119,13 +119,16 @@ class Assistant:
             self._tools_this_turn = []
             session = self._ensure_session()
             try:
-                return session.run(text, self._run_tool, self.emit)
+                return session.run(text, self._run_tool, self.emit,
+                                   quick=lambda n, a, o: fast.quick_reply(self.cfg, n, a, o))
             except providers.ProviderError as e:
                 self.session = None
                 if not e.transient:
                     raise
                 failed = session.model
-                self._dead[failed] = time.time() + 300          # rest it for 5 minutes
+                # Retired models (404) are skipped for the day; busy ones for 30 minutes,
+                # so a model that is down does not cost every command a failed call.
+                self._dead[failed] = time.time() + (86400 if e.status == 404 else 1800)
                 if self._tools_this_turn:
                     # Actions already happened - re-running the turn would repeat them.
                     done = "; ".join(self._tools_this_turn)
@@ -142,13 +145,22 @@ class Assistant:
                 self.emit("task", {"name": "model switch", "status": "warn",
                                    "detail": f"{failed} busy ({e.status}) -> {nxt}"})
 
+    def _instant(self, text: str) -> str | None:
+        """Everyday commands that need no AI: run them now (see core/fast.py)."""
+        hit = fast.instant(text, self.cfg)
+        if not hit:
+            return None
+        name, args = hit
+        out = self._run_tool(name, args)
+        return fast.quick_reply(self.cfg, name, args, out) or out
+
     def _local_command(self, text: str) -> str | None:
         """When no AI is reachable, still handle 'open X' / 'X kholo' / 'play X'."""
         import re
+        done = self._instant(text)
+        if done:
+            return done
         t = re.sub(r"^\[[^\]]*\]\s*", "", text).strip().rstrip(".!?")
-        if re.search(r"incognito|inprivate|private (window|mode)", t, re.I):
-            b = next((x for x in ("edge", "firefox", "brave") if x in t.lower()), "chrome")
-            return tools.execute("open_url", {"browser": b, "private": True})
         m = (re.match(r"^(?:please\s+)?(?:open|launch|start)\s+(.+)$", t, re.I)
              or re.match(r"^(.+?)\s+(?:kholo|khol do|khol|open karo|open kar do|open kr do|"
                          r"open kro|chalu karo|start karo)$", t, re.I))
@@ -207,9 +219,19 @@ class Assistant:
     def say_local(self, text: str) -> None:
         if not self.cfg.get("voice_enabled", True):
             return
-        audio = voice.synthesize(text, self.cfg.get("voice", "en-IN-PrabhatNeural"))
+        # Sentence by sentence: the first sentence starts playing while the rest
+        # are still being synthesised, instead of waiting for the whole reply.
+        chunks = voice.split_sentences(text) or [text]
+        sid, v = uuid.uuid4().hex[:6], self.cfg.get("voice", "en-IN-PrabhatNeural")
         self.listener.paused = True
-        self.emit("speak", {"audio": audio, "text": text})
+
+        def synth(i: int, chunk: str) -> None:
+            self.emit("speak", {"id": sid, "seq": i, "total": len(chunks), "text": chunk,
+                                "full": text, "audio": voice.synthesize(chunk, v)})
+
+        for i, chunk in enumerate(chunks[1:], 1):
+            threading.Thread(target=synth, args=(i, chunk), daemon=True).start()
+        synth(0, chunks[0])
 
     # -- the turn ------------------------------------------------------------
     def submit(self, text: str, source: str = "text") -> None:
@@ -224,7 +246,10 @@ class Assistant:
             self.emit("chat", {"role": "user", "text": text, "source": source})
             self.state("THINKING")
             try:
-                if not config.is_configured(self.cfg):
+                instant = self._instant(text)
+                if instant:
+                    reply = instant
+                elif not config.is_configured(self.cfg):
                     reply = "Pehle setup complete karo - API key aur nickname daalo."
                 else:
                     stamp = time.strftime("%A %d %B %Y, %I:%M %p")

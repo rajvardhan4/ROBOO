@@ -49,7 +49,7 @@ const NX = {
       case "chat": this.addMsg(ev.role, ev.text, ev.source); break;
       case "task": this.task(ev); break;
       case "intel": this.intel(ev); break;
-      case "speak": this.speak(ev.audio, ev.text); break;
+      case "speak": this.speak(ev); break;
       case "mic": HUD.S.mic = ev.level; break;
       case "mic_status": this.micStatus(ev.ok, ev.device); break;
       case "confirm": this.showConfirm(ev); break;
@@ -153,20 +153,44 @@ const NX = {
     tick();
   },
 
-  speak(b64, text) {
+  // A reply arrives as numbered sentence chunks (seq 0..total-1), synthesised in
+  // parallel and possibly out of order. Chunk 0 starts playing the moment it
+  // lands; the rest play back-to-back as they become available.
+  speak(ev) {
     this.ensureAudio();
     if (this.actx.state === "suspended") this.actx.resume();
-    this.stopSpeech();
-    this.subtitle(text);
-    const done = () => { this.playing = false; this.fakeSpeak = false; this.api.speech_done(); $("subtitle").textContent = ""; };
-    if (b64) {
-      const a = new Audio("data:audio/mpeg;base64," + b64);
+    const seq = ev.seq ?? 0, total = ev.total ?? 1, id = ev.id ?? Math.random().toString(36);
+    this.deadIds = this.deadIds || new Set();
+    if (this.deadIds.has(id)) return;                  // chunk of a reply that was cut off
+    if (!this.utt || this.utt.id !== id) {             // first chunk of a new reply (any seq)
+      this.stopSpeech();
+      this.utt = { id, total, parts: {}, next: 0, busy: false, done: false };
+      this.subtitle(ev.full || ev.text);
+    }
+    this.utt.parts[seq] = ev;
+    this.playNext();
+  },
+
+  playNext() {
+    const u = this.utt;
+    if (!u || u.busy || u.done) return;
+    if (u.next >= u.total) {
+      u.done = true; this.playing = false; this.fakeSpeak = false;
+      this.api.speech_done(); setTimeout(() => { if (u.done) $("subtitle").textContent = ""; }, 600);
+      return;
+    }
+    const part = u.parts[u.next];
+    if (!part) return;                       // not synthesised yet - wait for it
+    u.busy = true;
+    const after = () => { if (this.utt !== u) return; u.busy = false; u.next++; this.playNext(); };
+    if (part.audio) {
+      const a = new Audio("data:audio/mpeg;base64," + part.audio);
       this.audio = a;
       try { this.actx.createMediaElementSource(a).connect(this.analyser); } catch (e) { /* plays without viz */ }
-      a.onended = done; a.onerror = done;
+      a.onended = after; a.onerror = after;
       this.playing = true; this.setState("SPEAKING");
-      a.play().catch(() => { this.playing = false; this.browserSpeak(text, done); });
-    } else { this.browserSpeak(text, done); }
+      a.play().catch(() => { this.playing = false; this.browserSpeak(part.text, after); });
+    } else { this.browserSpeak(part.text, after); }
   },
 
   browserSpeak(text, done) {
@@ -178,7 +202,8 @@ const NX = {
   },
 
   stopSpeech() {
-    if (this.audio) { this.audio.onended = null; this.audio.pause(); this.audio = null; }
+    if (this.utt) { this.utt.done = true; (this.deadIds = this.deadIds || new Set()).add(this.utt.id); }
+    if (this.audio) { this.audio.onended = null; this.audio.onerror = null; this.audio.pause(); this.audio = null; }
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     this.playing = false; this.fakeSpeak = false;
   },

@@ -47,6 +47,20 @@ def clean_for_speech(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def split_sentences(text: str, max_parts: int = 4) -> list[str]:
+    """Split a reply into speakable sentences; tiny fragments join the next one."""
+    parts = [p.strip() for p in re.split(r"(?<=[.!?।])\s+", text.strip()) if p.strip()]
+    out: list[str] = []
+    for p in parts:
+        if out and len(out[-1]) < 30:
+            out[-1] = f"{out[-1]} {p}"
+        else:
+            out.append(p)
+    if len(out) > max_parts:
+        out = out[:max_parts - 1] + [" ".join(out[max_parts - 1:])]
+    return out
+
+
 def synthesize(text: str, voice: str) -> str | None:
     """Return base64 MP3 of `text`, or None if the TTS service is unreachable."""
     text = clean_for_speech(text)
@@ -175,7 +189,7 @@ class Listener:
 
             frames.append(raw)
             silence = silence + 1 if rms < max(floor * 1.8, 140) else 0
-            if silence >= 8 or len(frames) > 200:        # 0.8 s pause or 20 s max
+            if silence >= 6 or len(frames) > 200:        # 0.6 s pause or 20 s max
                 audio, speaking, frames, pre = b"".join(frames), False, [], []
                 if len(audio) > RATE * 2 * 0.4:
                     if not self.auto:

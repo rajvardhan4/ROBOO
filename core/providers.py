@@ -162,6 +162,17 @@ def list_models(cfg: dict) -> list[str]:
 
 ToolExec = Callable[[str, dict], str]
 Emit = Callable[[str, dict], None]
+# quick(name, args, result) -> a finished spoken reply, or None. When every tool
+# in a step returns one, the turn ends there instead of asking the model to
+# phrase "done" - one network round trip instead of two for simple actions.
+Quick = Callable[[str, dict, str], "str | None"]
+
+
+def _quick_reply(calls: list[tuple[str, dict, str]], quick: Quick | None) -> str | None:
+    if not quick or not calls:
+        return None
+    replies = [quick(n, a, out) for n, a, out in calls]
+    return " ".join(replies) if all(replies) else None
 
 
 class Session:
@@ -172,7 +183,8 @@ class Session:
     def turns(self) -> int:
         raise NotImplementedError
 
-    def run(self, text: str, execute: ToolExec, emit: Emit, max_steps: int = 8) -> str:
+    def run(self, text: str, execute: ToolExec, emit: Emit, max_steps: int = 8,
+            quick: Quick | None = None) -> str:
         raise NotImplementedError
 
     def vision(self, image_b64: str, prompt: str) -> str:
@@ -222,7 +234,7 @@ class AnthropicSession(Session):
         except a.APIConnectionError:
             raise ProviderError("Network error - internet check karo.", -1)
 
-    def run(self, text, execute, emit, max_steps=8):
+    def run(self, text, execute, emit, max_steps=8, quick=None):
         self.messages.append({"role": "user", "content": text})
         for _ in range(max_steps):
             resp = self._create(self.messages)
@@ -233,11 +245,16 @@ class AnthropicSession(Session):
             calls = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
             if not calls:
                 return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
-            results = []
+            results, done = [], []
             for c in calls:
                 out = execute(c.name, dict(c.input or {}))
                 results.append({"type": "tool_result", "tool_use_id": c.id, "content": out})
+                done.append((c.name, dict(c.input or {}), out))
             self.messages.append({"role": "user", "content": results})
+            fast = _quick_reply(done, quick)
+            if fast:
+                self.messages.append({"role": "assistant", "content": fast})
+                return fast
         return "Bahut saare steps ho gaye, yahin rok raha hoon."
 
     def vision(self, image_b64, prompt):
@@ -276,7 +293,7 @@ class GeminiSession(Session):
             raise ProviderError(f"Gemini ne jawab nahi diya ({reason}).")
         return cands[0].get("content") or {"role": "model", "parts": []}
 
-    def run(self, text, execute, emit, max_steps=8):
+    def run(self, text, execute, emit, max_steps=8, quick=None):
         self.contents.append({"role": "user", "parts": [{"text": text}]})
         for _ in range(max_steps):
             body = {"systemInstruction": {"parts": [{"text": self.system}]},
@@ -291,14 +308,19 @@ class GeminiSession(Session):
             if not calls:
                 return "".join(p.get("text", "") for p in content["parts"]
                                if not p.get("thought")).strip()
-            parts = []
+            parts, done = [], []
             for c in calls:
                 out = execute(c.get("name", ""), dict(c.get("args") or {}))
                 fr = {"name": c.get("name", ""), "response": {"result": out}}
                 if c.get("id"):
                     fr["id"] = c["id"]
                 parts.append({"functionResponse": fr})
+                done.append((c.get("name", ""), dict(c.get("args") or {}), out))
             self.contents.append({"role": "user", "parts": parts})
+            fast = _quick_reply(done, quick)
+            if fast:
+                self.contents.append({"role": "model", "parts": [{"text": fast}]})
+                return fast
         return "Bahut saare steps ho gaye, yahin rok raha hoon."
 
     def vision(self, image_b64, prompt):
@@ -340,7 +362,7 @@ class OpenAISession(Session):
             raise _http_error(r)
         return r.json()["choices"][0]["message"]
 
-    def run(self, text, execute, emit, max_steps=8):
+    def run(self, text, execute, emit, max_steps=8, quick=None):
         self.messages.append({"role": "user", "content": text})
         for _ in range(max_steps):
             msg = self._post(self.messages)
@@ -351,15 +373,22 @@ class OpenAISession(Session):
             calls = msg.get("tool_calls") or []
             if not calls:
                 return (msg.get("content") or "").strip()
+            done = []
             for c in calls:
                 fn = c.get("function", {})
                 try:
                     args = json.loads(fn.get("arguments") or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                out = execute(fn.get("name", ""), args if isinstance(args, dict) else {})
+                args = args if isinstance(args, dict) else {}
+                out = execute(fn.get("name", ""), args)
                 self.messages.append({"role": "tool", "tool_call_id": c.get("id", ""),
                                       "content": out})
+                done.append((fn.get("name", ""), args, out))
+            fast = _quick_reply(done, quick)
+            if fast:
+                self.messages.append({"role": "assistant", "content": fast})
+                return fast
         return "Bahut saare steps ho gaye, yahin rok raha hoon."
 
     def vision(self, image_b64, prompt):
