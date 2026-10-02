@@ -417,6 +417,14 @@ input, select { font-family: var(--font-b); }
 .setup-msg.ok { color: rgb(var(--ok)); }
 .settings-only { display: none !important; }
 #setup.settings .settings-only { display: flex !important; }
+.gender { display: flex; gap: 8px; }
+.gender button {
+  flex: 1; height: 38px; font-size: 11px; letter-spacing: 3px; color: var(--c-dim);
+  background: rgba(var(--rgb), .05); border: 1px solid var(--c-faint); transition: .2s;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+.gender button:hover { color: var(--c); border-color: var(--c-dim); }
+.gender button.sel { color: var(--bg); background: var(--c); border-color: var(--c); box-shadow: var(--glow); font-weight: 800; }
 .themes { display: flex; gap: 10px; flex-direction: row; }
 .themes button { width: 40px; height: 28px; border: 1px solid rgba(255,255,255,.2); transition: .2s; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
 .themes button.sel { outline: 2px solid #fff; transform: scale(1.12); }

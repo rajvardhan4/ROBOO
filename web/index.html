@@ -178,9 +178,12 @@
       <label class="f span2" id="baseRow">ENDPOINT URL
         <input id="fBase" placeholder="https://.../v1">
       </label>
-      <label class="f">VOICE
-        <select id="fVoice"></select>
-      </label>
+      <div class="f">VOICE
+        <div class="gender" id="fVoice">
+          <button type="button" data-v="en-IN-PrabhatNeural">&#x2642; MALE</button>
+          <button type="button" data-v="en-IN-NeerjaNeural">&#x2640; FEMALE</button>
+        </div>
+      </div>
       <label class="f">SPEECH LANGUAGE
         <select id="fLang"></select>
       </label>

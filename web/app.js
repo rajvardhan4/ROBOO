@@ -4,6 +4,7 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const FEMALE = ["en-IN-NeerjaNeural", "hi-IN-SwaraNeural", "en-US-JennyNeural", "en-GB-SoniaNeural", "en-US-AvaNeural"];
 const THEMES = { cyan: "#19f0ff", amber: "#ffba28", azure: "#46a0ff", emerald: "#28ff96", crimson: "#ff3c5a", violet: "#b978ff" };
 
 // Mock backend so the page can be previewed in a normal browser (?mock=1).
@@ -342,7 +343,7 @@ const NX = {
   fillSetup() {
     const st = this.st, c = st.config;
     $("fProvider").innerHTML = Object.entries(st.presets).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("");
-    $("fVoice").innerHTML = st.voices.map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    $("fVoice").querySelectorAll("button").forEach((b) => b.onclick = () => this.pickVoice(b.dataset.v));
     $("fLang").innerHTML = st.languages.map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
     $("themes").innerHTML = Object.entries(THEMES).map(([k, v]) => `<button type="button" data-t="${k}" title="${k}" style="background:${v};box-shadow:0 0 12px ${v}"></button>`).join("");
     $("themes").querySelectorAll("button").forEach((b) => b.onclick = () => this.pickTheme(b.dataset.t));
@@ -362,7 +363,8 @@ const NX = {
     $("fKey").value = ""; $("fKey").placeholder = c.has_key ? `Saved key ${c.key_hint} — leave blank to keep` : "Paste any AI API key - Claude, Gemini, OpenAI, Groq, OpenRouter...";
     $("fProvider").value = c.provider || "anthropic";
     $("fModel").value = c.model || ""; $("fBase").value = c.base_url || "";
-    $("fVoice").value = c.voice; $("fLang").value = c.language;
+    this.pickVoice(FEMALE.includes(c.voice) ? "en-IN-NeerjaNeural" : "en-IN-PrabhatNeural");
+    $("fLang").value = c.language;
     $("fVoiceOn").checked = !!c.voice_enabled; $("fAuto").checked = !!c.auto_listen;
     this.pickTheme(c.theme || "cyan", true);
     this.providerChanged(false);
@@ -382,6 +384,11 @@ const NX = {
   },
   openSettings() { this.openSetup(true); },
   closeSettings() { this.pickTheme(this.st.config.theme || "cyan", true); $("setup").classList.remove("show"); },
+
+  pickVoice(v) {
+    this.voice = v;
+    $("fVoice").querySelectorAll("button").forEach((b) => b.classList.toggle("sel", b.dataset.v === v));
+  },
 
   pickTheme(t, silent) {
     this.theme = t;
@@ -429,7 +436,7 @@ const NX = {
     const v = {
       nickname: $("fNick").value.trim(), user_name: $("fUser").value.trim(), provider: $("fProvider").value,
       api_key: $("fKey").value.trim(), model: $("fModel").value.trim(), base_url: $("fBase").value.trim(),
-      voice: $("fVoice").value, language: $("fLang").value, theme: this.theme || "cyan",
+      voice: this.voice || "en-IN-PrabhatNeural", language: $("fLang").value, theme: this.theme || "cyan",
     };
     if (this.settingsMode) { v.voice_enabled = $("fVoiceOn").checked; v.auto_listen = $("fAuto").checked; }
     const msg = $("setupMsg"); msg.className = "setup-msg";
