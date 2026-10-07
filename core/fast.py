@@ -14,6 +14,10 @@ import re
 
 from core import tools
 
+# Tools that only look things up - repeating them changes nothing on the PC.
+READ_ONLY = {"web_search", "get_weather", "system_status", "list_files", "read_file",
+             "look_at_screen", "wait"}
+
 _FAIL = ("failed", "could not", "not found", "unknown tool", "bad arguments",
          "declined", "no running process", "not available")
 
@@ -65,6 +69,32 @@ def quick_reply(cfg: dict, name: str, args: dict, out: str) -> str | None:
         return "PC lock kar diya." if hi else "Locked."
     if name in ("type_text", "press_keys"):
         return "Ho gaya." if hi else "Done."
+    return None
+
+
+_MULTI = re.compile(r",|\b(aur|and|phir|fir|then|also|uske baad|after that|usme|usmein|"
+                    r"uspe|us par|ke baad|bhi|likho|type|search karo|dhundo)\b")
+
+
+def single_step(text: str) -> bool:
+    """True for a request that is one action ("chrome kholo"), so the turn may end
+    as soon as that action is done. Anything that looks multi-step returns False."""
+    t = re.sub(r"^\[[^\]]*\]\s*", "", text).lower()
+    return len(t.split()) <= 9 and not _MULTI.search(t)
+
+
+def mode_command(text: str) -> str | None:
+    """'super fast mode', 'fast mode on', 'medium mode', 'low mode' -> mode name."""
+    t = re.sub(r"^\[[^\]]*\]\s*", "", text).lower().strip(" .!?")
+    if not re.search(r"\bmode\b", t) or len(t.split()) > 6:
+        return None
+    if re.search(r"super\s*fast|superfast|turbo", t):
+        return "superfast"
+    for name in ("medium", "fast", "low"):
+        if re.search(rf"\b{name}\b", t):
+            return name
+    if re.search(r"\b(power|deep|smart)\b", t):
+        return "low"
     return None
 
 

@@ -86,6 +86,29 @@ def _key(k: str) -> None:
     pyautogui.press(k)
 
 
+# When an app or browser window was launched a moment ago, keystrokes sent right
+# away land in whatever had focus before it. Typing tools wait for it to settle.
+_last_launch = [0.0]
+
+
+def _launched() -> None:
+    _last_launch[0] = time.time()
+
+
+def _settle(after: float = 2.0) -> None:
+    left = after - (time.time() - _last_launch[0])
+    if left > 0:
+        time.sleep(left)
+
+
+@tool("wait", "Pause for some seconds (max 10), e.g. to let a page or app finish loading.",
+      {"seconds": _n("Seconds to wait")}, ["seconds"])
+def wait(seconds: float) -> str:
+    s = max(0.0, min(10.0, float(seconds)))
+    time.sleep(s)
+    return f"Waited {s:g}s."
+
+
 # ── apps & web ────────────────────────────────────────────────────────────────
 
 _APP_ALIASES = {
@@ -114,6 +137,7 @@ _WEB_APPS = {
       "(e.g. chrome, notepad, vs code, spotify, whatsapp, settings, youtube, gmail).",
       {"name": _s("App or site name")}, ["name"])
 def open_app(name: str) -> str:
+    _launched()
     n = name.strip().lower()
     if any(w in n for w in ("incognito", "inprivate", "private window", "private mode")):
         b = next((k for k in _BROWSERS if k in n), "chrome")
@@ -174,6 +198,7 @@ _PRIVATE_FLAG = {"chrome": "--incognito", "msedge": "--inprivate",
                    "description": "Which browser (default = system default; chrome if private)"},
        "private": {"type": "boolean", "description": "Open in incognito / private mode"}})
 def open_url(url: str = "", browser: str = "default", private: bool = False) -> str:
+    _launched()
     url = (url or "").strip()
     if url and not url.startswith(("http://", "https://", "about:", "chrome:", "edge:")):
         url = "https://" + url
@@ -342,6 +367,7 @@ def power(action: str) -> str:
 def type_text(text: str) -> str:
     import pyautogui
     import pyperclip
+    _settle()
     pyperclip.copy(text)                      # clipboard paste handles every language
     pyautogui.hotkey("ctrl", "v")
     return "Typed."
@@ -351,6 +377,7 @@ def type_text(text: str) -> str:
       {"keys": _s("Key or combination joined with +")}, ["keys"])
 def press_keys(keys: str) -> str:
     import pyautogui
+    _settle()
     parts = [k.strip().lower() for k in keys.split("+") if k.strip()]
     pyautogui.hotkey(*parts) if len(parts) > 1 else pyautogui.press(parts[0])
     return f"Pressed {keys}."

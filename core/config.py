@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from pathlib import Path
@@ -14,9 +15,15 @@ def base_dir() -> Path:
 
 
 BASE_DIR = base_dir()
-CONFIG_DIR = BASE_DIR / "config"
+FROZEN = getattr(sys, "frozen", False)
+# Bundled read-only files (the web UI). PyInstaller unpacks them to _MEIPASS.
+RES_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
+# The packaged app keeps each user's settings and memory in their own profile,
+# so it works wherever the .exe is unzipped (even a read-only folder).
+_USER_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ROBOO" if FROZEN else BASE_DIR
+CONFIG_DIR = _USER_DIR / "config"
 CONFIG_FILE = CONFIG_DIR / "settings.json"
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = _USER_DIR / "data"
 
 DEFAULTS: dict = {
     "nickname": "",            # the assistant's name, chosen at setup
@@ -30,6 +37,7 @@ DEFAULTS: dict = {
     "theme": "cyan",
     "voice_enabled": True,     # speak replies aloud
     "auto_listen": False,      # keep the mic open between turns
+    "mode": "fast",            # low | medium | fast | superfast  (see providers.MODES)
 }
 
 _lock = threading.Lock()

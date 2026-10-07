@@ -16,6 +16,7 @@ the model answers in plain text.
 from __future__ import annotations
 
 import json
+import time
 from typing import Callable
 
 import requests
@@ -134,6 +135,18 @@ def _http_error(r: requests.Response) -> ProviderError:
     return ProviderError(f"HTTP {r.status_code}: {str(msg)[:300]} {hint}".strip(), r.status_code)
 
 
+def _post_retry(url: str, headers: dict, body: dict) -> requests.Response:
+    """POST once more after a dropped connection - Wi-Fi blips are common and a
+    second try usually lands. A real outage still surfaces as a network error."""
+    for attempt in (0, 1):
+        try:
+            return requests.post(url, headers=headers, json=body, timeout=120)
+        except requests.RequestException as e:
+            if attempt:
+                raise ProviderError(f"Network error: {e}", -1)
+            time.sleep(0.8)
+
+
 def list_models(cfg: dict) -> list[str]:
     kind = preset(cfg.get("provider", "")).get("kind")
     key, base = cfg.get("api_key", ""), _base(cfg)
@@ -211,7 +224,8 @@ class AnthropicSession(Session):
         if tools and self._tools:
             kw["tools"] = self._tools
         if self.model.startswith(_CLAUDE_EFFORT):
-            kw["output_config"] = {"effort": "low"}    # chat-length replies, low latency
+            # The speed mode sets the effort; chat-length replies default to low.
+            kw["output_config"] = {"effort": self.cfg.get("_effort") or "low"}
         a = self._anthropic
         try:
             if self.model in _CLAUDE_FALLBACK:
@@ -272,6 +286,7 @@ class GeminiSession(Session):
         self.headers = {"x-goog-api-key": cfg.get("api_key", ""),
                         "Content-Type": "application/json"}
         self.contents: list = []
+        self.think = cfg.get("_think")          # thinkingLevel from the speed mode, or None
         self._tools = [{"functionDeclarations": [
             {"name": t["name"], "description": t["description"],
              "parameters": t["parameters"]} for t in tools]}]
@@ -280,10 +295,13 @@ class GeminiSession(Session):
         return len(self.contents)
 
     def _post(self, body):
-        try:
-            r = requests.post(self.url, headers=self.headers, json=body, timeout=120)
-        except requests.RequestException as e:
-            raise ProviderError(f"Network error: {e}", -1)
+        if self.think:
+            body = {**body, "generationConfig": {"thinkingConfig": {"thinkingLevel": self.think}}}
+        r = _post_retry(self.url, self.headers, body)
+        if r.status_code == 400 and self.think and "think" in r.text.lower():
+            self.think = None                   # model has no thinking levels - drop it
+            body.pop("generationConfig", None)
+            return self._post(body)
         if not r.ok:
             raise _http_error(r)
         data = r.json()
@@ -350,10 +368,7 @@ class OpenAISession(Session):
         body = {"model": self.model, "messages": messages}
         if tools and self._tools_ok and self._tools:
             body["tools"] = self._tools
-        try:
-            r = requests.post(self.url, headers=self.headers, json=body, timeout=120)
-        except requests.RequestException as e:
-            raise ProviderError(f"Network error: {e}", -1)
+        r = _post_retry(self.url, self.headers, body)
         if not r.ok and "tools" in body and r.status_code == 400 and "tool" in r.text.lower():
             # Model without function calling: carry on as a plain chat model.
             self._tools_ok = False
@@ -397,6 +412,33 @@ class OpenAISession(Session):
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}]}],
             tools=False)
         return msg.get("content") or ""
+
+
+# ── speed modes ───────────────────────────────────────────────────────────────
+# Speed vs. depth. Every mode has every skill; slower modes give the AI more
+# room to think, which is what multi-step tasks need. Gemini lists are tried in
+# order (the first one this key can use wins); other providers keep the user's
+# model and change only how hard it thinks.
+MODES: dict[str, dict] = {
+    "low": {"label": "LOW", "think": "high", "effort": "high", "steps": 12, "quick": False,
+            "gemini": ["gemini-3.1-pro-preview", "gemini-pro-latest", "gemini-3.7-flash",
+                       "gemini-3.6-flash", "gemini-3-flash-preview"]},
+    "medium": {"label": "MEDIUM", "think": None, "effort": "medium", "steps": 10, "quick": False,
+               "gemini": ["gemini-3-flash-preview", "gemini-3.6-flash", "gemini-3.5-flash",
+                          "gemini-flash-latest"]},
+    "fast": {"label": "FAST", "think": "low", "effort": "low", "steps": 8, "quick": True,
+             "gemini": ["gemini-3-flash-preview", "gemini-3.5-flash-lite",
+                        "gemini-flash-lite-latest"]},
+    "superfast": {"label": "SUPER FAST", "think": "minimal", "effort": "low", "steps": 6,
+                  "quick": True,
+                  "gemini": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest",
+                             "gemini-3.1-flash-lite"]},
+}
+DEFAULT_MODE = "fast"
+
+
+def mode(cfg: dict) -> dict:
+    return MODES.get(cfg.get("mode") or DEFAULT_MODE, MODES[DEFAULT_MODE])
 
 
 def make_session(cfg: dict, system: str, tools: list[dict]) -> Session:

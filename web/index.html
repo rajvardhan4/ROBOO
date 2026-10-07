@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ROBOO</title>
+<link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -17,6 +18,7 @@
 <section id="boot">
   <canvas id="bootRings"></canvas>
   <div class="boot-box">
+    <img class="boot-logo" src="logo.png" alt="">
     <div class="boot-title" data-text="ROBOO">ROBOO</div>
     <div class="boot-sub">PERSONAL NEURAL INTERFACE</div>
     <pre id="bootLog"></pre>
@@ -29,11 +31,7 @@
 <main id="app">
   <header class="topbar pywebview-drag-region">
     <div class="brand">
-      <svg class="emblem" viewBox="0 0 60 60">
-        <polygon class="e1" points="30,3 54,16.5 54,43.5 30,57 6,43.5 6,16.5"/>
-        <polygon class="e2" points="30,12 46,21 46,39 30,48 14,39 14,21"/>
-        <circle class="e3" cx="30" cy="30" r="6"/>
-      </svg>
+      <div class="emblem"><img src="logo.png" alt=""><i></i></div>
       <div>
         <div id="brandName" class="glitch" data-text="ROBOO">ROBOO</div>
         <div class="brand-sub">NEURAL INTERFACE <span class="sep">//</span> <span id="brandModel">OFFLINE</span></div>
@@ -44,6 +42,7 @@
       <div id="date">---</div>
     </div>
     <div class="top-right">
+      <div class="modes" id="modes" title="Speed mode"></div>
       <div class="chip" id="chipAI"><i></i><span>AI LINK</span></div>
       <div class="chip" id="chipMic"><i></i><span>MIC</span></div>
       <div class="chip" id="chipNet"><i></i><span>NET</span></div>

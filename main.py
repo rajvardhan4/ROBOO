@@ -26,7 +26,7 @@ import psutil
 import webview
 
 from core import config, fast, memory, providers, tools, voice
-from core.config import BASE_DIR
+from core.config import RES_DIR
 
 APP_NAME = "ROBOO"
 
@@ -50,6 +50,24 @@ scores, weather, recent events) use web_search or get_weather instead of guessin
 reports the user declined, accept it and do not retry. When the user tells you something worth \
 keeping about themselves, save it with remember.
 
+Doing tasks properly:
+- Finish the WHOLE request. "Notepad kholo aur hello likho" means open_app, then type_text - \
+not just the first step. Keep calling tools until every part is done, then reply once.
+- Be fast: when steps do not need to see an earlier result, call them ALL in one response - \
+they run in the order you list them. "Notepad kholo aur hello likho" = one response with \
+open_app, wait, press_keys(ctrl+n), type_text. Only wait for results you actually need to read \
+(search results, file lists, weather).
+- A website in a specific browser is one call: open_url with url and browser \
+("chrome mein gmail kholo" -> open_url(url="mail.google.com", browser="chrome")).
+- After opening an app you are about to type into or send keys to, call wait(1.5) first so it \
+has focus.
+- To write NEW text in Notepad, Word or any editor, first press_keys("ctrl+n") so a fresh \
+document opens - these apps reopen old files, and typing into one of those would change it.
+- To do something inside an app (new tab, save, search box), use press_keys with its shortcut \
+(new tab = ctrl+t, save = ctrl+s, find = ctrl+f, address bar = ctrl+l, close tab = ctrl+w).
+- If you cannot do something with your tools, say so plainly in one sentence - never pretend.
+- If a step fails, read the error, try one sensible alternative, then report honestly.
+
 Each user message starts with the current local date and time in square brackets.
 
 What you already know about {user}:
@@ -64,7 +82,7 @@ class Assistant:
         self.active_model: str | None = None
         self._dead: dict[str, float] = {}          # model -> time it may be retried
         self._catalog: list[str] | None = None     # models this key can use
-        self._tools_this_turn: list[str] = []
+        self._tools_this_turn: list[tuple[str, dict, str]] = []
         self._jobs: queue.Queue = queue.Queue()
         self._confirms: dict[str, tuple[threading.Event, list]] = {}
         self.busy = False
@@ -82,34 +100,64 @@ class Assistant:
     def state(self, s: str) -> None:
         self.emit("state", {"state": s})
 
-    def _pick_model(self) -> str:
-        """The configured model, unless it failed recently - then the fallback in use."""
-        now = time.time()
-        want = self.cfg.get("model", "")
-        if self._dead.get(want, 0) < now:
-            return want
-        if self.active_model and self._dead.get(self.active_model, 0) < now:
-            return self.active_model
-        return self._next_fallback() or want
-
-    def _next_fallback(self) -> str | None:
+    def _catalog_models(self) -> list[str]:
         if self._catalog is None:
             try:
                 self._catalog = providers.list_models(self.cfg)
             except Exception:
                 self._catalog = []
+        return self._catalog
+
+    def _pick_model(self) -> str:
+        """The speed mode's model (Gemini) or the configured one - unless it failed
+        recently, then the fallback in use."""
         now = time.time()
-        for m in providers.fallback_models(self.cfg, self._catalog):
+        alive = lambda m: m and self._dead.get(m, 0) < now
+        want = self.cfg.get("model", "")
+        if providers.preset(self.cfg.get("provider", "")).get("kind") == "gemini":
+            cat = self._catalog_models()
+            tier = [m for m in providers.mode(self.cfg)["gemini"] if m in cat or not cat]
+            want = next((m for m in tier if alive(m)), want)
+        if alive(want):
+            return want
+        if alive(self.active_model):
+            return self.active_model
+        return self._next_fallback() or want
+
+    def _next_fallback(self) -> str | None:
+        now = time.time()
+        cat = self._catalog_models()
+        tier = []
+        if providers.preset(self.cfg.get("provider", "")).get("kind") == "gemini":
+            # Stay in the mode's own class of model first (flash before lite in LOW).
+            tier = [m for m in providers.mode(self.cfg)["gemini"] if m in cat]
+            tier += [m for m in providers.MODES["medium"]["gemini"] + providers.MODES["fast"]["gemini"]
+                     if m in cat and m not in tier]
+        for m in tier + providers.fallback_models(self.cfg, cat):
             if self._dead.get(m, 0) < now:
                 return m
         return None
 
     def _ensure_session(self) -> providers.Session:
-        model = self._pick_model()
-        if self.session is None or self.session.turns() > 60 or self.session.model != model:
-            self.session = providers.make_session({**self.cfg, "model": model},
-                                                  system_prompt(self.cfg), tools.schemas())
+        model, md = self._pick_model(), providers.mode(self.cfg)
+        if (self.session is None or self.session.turns() > 60 or self.session.model != model
+                or getattr(self.session, "_mode", None) != md["label"]):
+            self.session = providers.make_session(
+                {**self.cfg, "model": model, "_think": md["think"], "_effort": md["effort"]},
+                system_prompt(self.cfg), tools.schemas())
+            self.session._mode = md["label"]
+            self.emit("model", {"model": model, "mode": self.cfg.get("mode", "fast")})
         return self.session
+
+    def set_mode(self, name: str) -> str:
+        if name not in providers.MODES:
+            return "Unknown mode."
+        self.cfg = config.save({"mode": name})
+        self.session = None
+        label = providers.MODES[name]["label"]
+        self.emit("mode", {"mode": name})
+        hi = not str(self.cfg.get("language", "")).startswith(("en-US", "en-GB"))
+        return f"{label} mode on." if not hi else f"{label} mode chalu kar diya."
 
     def _ask(self, text: str) -> str:
         """One turn, stepping to another model when the current one is overloaded,
@@ -118,21 +166,39 @@ class Assistant:
         while True:
             self._tools_this_turn = []
             session = self._ensure_session()
+            md = providers.mode(self.cfg)
+            # Ending the turn right after the first action is only safe for one-step
+            # requests - "notepad kholo aur hello likho" must reach the typing step.
+            quick = (lambda n, a, o: fast.quick_reply(self.cfg, n, a, o)) \
+                if md["quick"] and fast.single_step(text) else None
             try:
                 return session.run(text, self._run_tool, self.emit,
-                                   quick=lambda n, a, o: fast.quick_reply(self.cfg, n, a, o))
+                                   max_steps=md["steps"], quick=quick)
             except providers.ProviderError as e:
                 self.session = None
+                # Only *reading* tools ran (search, files, weather)? Then nothing on the
+                # PC changed, and another model can safely redo the turn and answer.
+                if all(n in fast.READ_ONLY for n, _, _ in self._tools_this_turn):
+                    self._tools_this_turn = []
+                if self._tools_this_turn and e.status in (-1, 429, 500, 502, 503, 504, 529):
+                    # Actions already happened - re-running the turn would repeat them.
+                    return self._summary()
+                if e.status == -1:
+                    # No internet: no model is to blame, so don't bench any of them.
+                    local = self._local_command(text)
+                    if local:
+                        return local
+                    raise providers.ProviderError(
+                        "Internet connection nahi mil raha - net check karke dobara bolo.", -1)
                 if not e.transient:
                     raise
                 failed = session.model
-                # Retired models (404) are skipped for the day; busy ones for 30 minutes,
-                # so a model that is down does not cost every command a failed call.
-                self._dead[failed] = time.time() + (86400 if e.status == 404 else 1800)
+                # Retired models (404) are skipped for the day; overloaded ones (503) for
+                # 30 minutes; rate-limited ones (429 - free keys allow a few calls a minute)
+                # for one minute, so a model that is down does not cost every command.
+                self._dead[failed] = time.time() + {404: 86400, 429: 60}.get(e.status, 1800)
                 if self._tools_this_turn:
-                    # Actions already happened - re-running the turn would repeat them.
-                    done = "; ".join(self._tools_this_turn)
-                    return f"Ho gaya. ({done})"
+                    return self._summary()
                 nxt = self._next_fallback() if tried < 4 else None
                 if not nxt:
                     local = self._local_command(text)
@@ -145,8 +211,18 @@ class Assistant:
                 self.emit("task", {"name": "model switch", "status": "warn",
                                    "detail": f"{failed} busy ({e.status}) -> {nxt}"})
 
+    def _summary(self) -> str:
+        """A spoken 'done' for actions that ran before the AI could phrase one."""
+        said = [fast.quick_reply(self.cfg, n, a, o) for n, a, o in self._tools_this_turn
+                if n != "wait"]
+        said = [s for s in said if s and s not in ("Ho gaya.", "Done.")]
+        return " ".join(dict.fromkeys(said)) or "Ho gaya."
+
     def _instant(self, text: str) -> str | None:
         """Everyday commands that need no AI: run them now (see core/fast.py)."""
+        m = fast.mode_command(text)
+        if m:
+            return self.set_mode(m)
         hit = fast.instant(text, self.cfg)
         if not hit:
             return None
@@ -276,7 +352,7 @@ class Assistant:
         self.state("PROCESSING")
         t0 = time.time()
         out = tools.execute(name, args)
-        self._tools_this_turn.append(out[:80])
+        self._tools_this_turn.append((name, args, out))
         ok = not any(w in out[:80].lower() for w in ("failed", "unknown tool", "bad arguments",
                                                      "not found", "declined"))
         self.emit("task", {"id": tid, "name": name, "status": "done" if ok else "warn",
@@ -344,6 +420,7 @@ class Api:
             "mic": {"ok": self._assistant.listener.ok,
                     "device": self._assistant.listener.device_name},
             "tools": [t["name"] for t in tools.schemas()],
+            "modes": {k: v["label"] for k, v in providers.MODES.items()},
         }
 
     def detect_provider(self, key):
@@ -375,10 +452,14 @@ class Api:
 
     def save_prefs(self, values):
         allowed = {k: values[k] for k in ("theme", "voice", "language", "voice_enabled",
-                                          "auto_listen") if k in values}
+                                          "auto_listen", "mode") if k in values}
         config.save(allowed)
         self._assistant.reset()
         return self.get_state()
+
+    def set_mode(self, name):
+        msg = self._assistant.set_mode(name)
+        return {"ok": name in providers.MODES, "message": msg}
 
     def send_text(self, text):
         self._assistant.submit(text, "text")
@@ -473,7 +554,7 @@ def main():
     # Opens maximised: the HUD is designed to own the screen, and it sidesteps
     # display-scaling maths. The restore size below is used when un-maximised.
     window = webview.create_window(
-        APP_NAME, url=str(BASE_DIR / "web" / "index.html"), js_api=api,
+        APP_NAME, url=str(RES_DIR / "web" / "index.html"), js_api=api,
         width=1280, height=760, min_size=(1100, 660), frameless=True,
         easy_drag=False, background_color="#01060a",
     )

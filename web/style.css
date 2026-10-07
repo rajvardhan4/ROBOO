@@ -109,11 +109,14 @@ input, select { font-family: var(--font-b); }
   background: linear-gradient(90deg, transparent, rgba(var(--rgb), .8) 20%, transparent 21%, transparent 79%, rgba(var(--rgb), .8) 80%, transparent) bottom / 100% 2px no-repeat;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
-.emblem { width: 42px; height: 42px; }
-.emblem polygon, .emblem circle { fill: none; stroke: var(--c); stroke-width: 1.6; }
-.emblem .e1 { stroke-dasharray: 8 4; animation: spin 14s linear infinite; transform-origin: 30px 30px; }
-.emblem .e2 { stroke: var(--a); animation: spin 7s linear infinite reverse; transform-origin: 30px 30px; }
-.emblem .e3 { fill: var(--c); filter: drop-shadow(0 0 5px var(--c)); animation: pulse 1.6s ease-in-out infinite; transform-origin: 30px 30px; }
+.emblem { position: relative; width: 44px; height: 44px; }
+.emblem img { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 6px rgba(var(--rgb), .7)); }
+.emblem i {
+  position: absolute; inset: -4px; border-radius: 50%; border: 1.5px dashed var(--c-dim);
+  animation: spin 12s linear infinite;
+}
+.boot-logo { width: 130px; height: 130px; margin-bottom: 10px; filter: drop-shadow(0 0 22px rgba(var(--rgb), .7)); animation: logoIn 1.2s cubic-bezier(.2,.9,.2,1) both; }
+@keyframes logoIn { from { opacity: 0; transform: scale(.3) rotate(-90deg); filter: brightness(3) blur(6px); } to { opacity: 1; transform: none; } }
 #brandName { font-family: var(--font-h); font-weight: 900; font-size: 24px; letter-spacing: 7px; color: var(--c); text-shadow: var(--glow); }
 .brand-sub { font-family: var(--font-m); font-size: 10.5px; letter-spacing: 2px; color: var(--c-dim); }
 .brand-sub .sep { color: var(--a); }
@@ -127,6 +130,23 @@ input, select { font-family: var(--font-b); }
 #clock { font-family: var(--font-h); font-weight: 600; font-size: 26px; letter-spacing: 5px; color: #fff; text-shadow: var(--glow); }
 #date { font-family: var(--font-m); font-size: 10.5px; letter-spacing: 3px; color: var(--c-dim); }
 .top-right { display: flex; align-items: center; gap: 8px; }
+.modes {
+  display: flex; margin-right: 6px; padding: 2px; gap: 2px; border: 1px solid var(--c-faint);
+  background: rgba(var(--rgb), .04);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+.modes button {
+  position: relative; padding: 5px 10px; font-size: 9.5px; font-weight: 600; letter-spacing: 1.6px;
+  color: var(--c-dim); background: transparent; border: none; transition: .2s; white-space: nowrap;
+}
+.modes button:hover { color: var(--c); background: rgba(var(--rgb), .1); }
+.modes button.sel { color: var(--bg); background: var(--c); box-shadow: var(--glow); }
+.modes button[data-m="superfast"].sel { background: var(--a); box-shadow: 0 0 14px rgba(var(--acc), .8); }
+.modes button[data-m="superfast"]::before { content: "\26A1"; margin-right: 3px; }
+.modes button.sel::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 2px; background: inherit;
+  animation: pulse 1.6s infinite;
+}
 .chip {
   display: flex; align-items: center; gap: 6px; padding: 5px 10px; font-family: var(--font-h); font-size: 9.5px;
   letter-spacing: 1.5px; border: 1px solid var(--c-faint); background: var(--c-ghost);

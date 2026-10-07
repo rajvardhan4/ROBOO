@@ -15,7 +15,10 @@ const MOCK = {
     return { configured: !!this._cfg.nickname, config: { ...this._cfg, has_key: false },
       presets: { anthropic: { label: "Anthropic Claude", base: "https://api.anthropic.com", model: "claude-opus-5-5" }, gemini: { label: "Google Gemini", base: "", model: "gemini-flash-latest" }, openai: { label: "OpenAI", base: "https://api.openai.com/v1", model: "gpt-4o-mini" }, ollama: { label: "Ollama (local)", base: "http://localhost:11434/v1", model: "llama3.2" }, custom: { label: "Custom (OpenAI-compatible)", base: "", model: "" } },
       voices: [["en-IN-PrabhatNeural", "Prabhat - English (India), male"]], languages: [["en-IN", "English (India)"]],
-      memory: [{ fact: "Likes lofi music while coding", at: "2026-09-30" }], mic: { ok: true, device: "Mock mic" }, tools: [] };
+      memory: [{ fact: "Likes lofi music while coding", at: "2026-09-30" }], mic: { ok: true, device: "Mock mic" }, tools: [],
+      modes: { low: "LOW", medium: "MEDIUM", fast: "FAST", superfast: "SUPER FAST" } };
+  },
+  async set_mode(m) { this._cfg.mode = m; return { ok: true, message: m + " mode on." };
   },
   async detect_provider(k) { return k.startsWith("sk-ant-") ? "anthropic" : k.startsWith("AIza") ? "gemini" : k.startsWith("sk-") ? "openai" : ""; },
   async fetch_models() { return { ok: true, models: ["model-a", "model-b"] }; },
@@ -56,6 +59,8 @@ const NX = {
       case "confirm_close": if (this.confirmId === ev.id) $("confirm").classList.remove("show"); break;
       case "reminder": this.toast("REMINDER", ev.message); break;
       case "memory": if (this.st) { this.st.memory = ev.facts; this.renderMemory(); } break;
+      case "mode": this.showMode(ev.mode); break;
+      case "model": this.activeModel = ev.model; this.showMode(ev.mode); break;
     }
   },
 
@@ -262,6 +267,28 @@ const NX = {
   clearChat() { $("chat").innerHTML = ""; $("tasks").innerHTML = `<div class="empty">NO ACTIVE TASKS</div>`; $("intelCards").innerHTML = ""; $("radar").style.display = ""; this.api.clear_chat(); },
   win(a) { this.api["win_" + a]?.(); },
 
+  // ── speed modes ─────────────────────────────────────────────────
+  renderModes() {
+    const box = $("modes"), modes = this.st?.modes || {};
+    const tips = { low: "Deep thinking - best for complex tasks (slowest)", medium: "Balanced",
+      fast: "Quick and smart (default)", superfast: "Fastest replies" };
+    box.innerHTML = Object.entries(modes).map(([k, v]) =>
+      `<button data-m="${k}" title="${tips[k] || ""}">${esc(v)}</button>`).join("");
+    box.querySelectorAll("button").forEach((b) => b.onclick = async () => {
+      this.showMode(b.dataset.m);
+      const r = await this.api.set_mode(b.dataset.m);
+      if (r?.message) this.toast("MODE", r.message);
+    });
+    this.showMode(this.st?.config.mode || "fast");
+  },
+  showMode(m) {
+    if (!m) return;
+    if (this.st) this.st.config.mode = m;
+    $("modes").querySelectorAll("button").forEach((b) => b.classList.toggle("sel", b.dataset.m === m));
+    const c = this.st?.config || {}, p = this.st?.presets?.[c.provider];
+    if (this.st?.configured) $("brandModel").textContent = `${(p?.label || c.provider || "").toUpperCase()} · ${this.activeModel || c.model}`;
+  },
+
   // ── status / chrome ─────────────────────────────────────────────
   applyState(st) {
     this.st = st;
@@ -276,6 +303,7 @@ const NX = {
     $("chipAI").classList.toggle("on", st.configured);
     $("chipAI").title = st.configured ? `${p?.label} / ${c.model}` : "No AI connected";
     $("chipMic").classList.toggle("on", !!st.mic?.ok);
+    this.renderModes();
     this.ticker();
   },
 
