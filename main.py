@@ -11,9 +11,33 @@ from __future__ import annotations
 import json
 import os
 import queue
+import sys
 import threading
 import time
 import uuid
+
+
+def _unblock_bundle() -> None:
+    """Windows tags every file unzipped from a downloaded zip as 'from the
+    internet' (the Zone.Identifier stream, a.k.a. Mark of the Web). .NET then
+    refuses to load the bundled Python.Runtime.dll that drives the window, and
+    the app dies with 'Failed to resolve Python.Runtime.Loader.Initialize'.
+    Removing the tag from our own bundled files - before .NET is touched - fixes
+    it without asking anyone to right-click -> Properties -> Unblock."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return
+    root = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    for base in {root, os.path.dirname(sys.executable)}:
+        for dirpath, _dirs, files in os.walk(base):
+            for f in files:
+                if f.lower().endswith((".dll", ".pyd", ".exe")):
+                    try:
+                        os.remove(os.path.join(dirpath, f) + ":Zone.Identifier")
+                    except OSError:
+                        pass                    # not tagged, or not ours to change
+
+
+_unblock_bundle()
 
 # Let the page play the assistant's voice without a click first. DirectComposition
 # is off because on some GPU drivers it presents a frameless WebView2 window as
@@ -565,5 +589,56 @@ def main():
     webview.start(http_server=True, debug=bool(os.environ.get("ROBOO_DEBUG")))
 
 
+WEBVIEW2_URL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+
+
+def _message(text: str, error: bool = True) -> None:
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, text, APP_NAME, 0x10 if error else 0x40)
+    except Exception:
+        print(text)
+
+
+def _webview2_installed() -> bool:
+    """Edge WebView2 draws the HUD. Windows 11 always has it; some older
+    Windows 10 PCs do not, and pywebview would silently fall back to Internet
+    Explorer and show a broken page."""
+    if os.name != "nt":
+        return True
+    import winreg
+    guid = r"{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+    for hive, path in ((winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{guid}"),
+                       (winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\Microsoft\EdgeUpdate\Clients\{guid}"),
+                       (winreg.HKEY_CURRENT_USER, rf"Software\Microsoft\EdgeUpdate\Clients\{guid}")):
+        try:
+            with winreg.OpenKey(hive, path) as k:
+                if str(winreg.QueryValueEx(k, "pv")[0]) not in ("", "0.0.0.0"):
+                    return True
+        except OSError:
+            continue
+    return False
+
+
 if __name__ == "__main__":
-    main()
+    if not _webview2_installed():
+        import webbrowser
+        _message("ROBOO needs Microsoft Edge WebView2 (a free Microsoft component).\n\n"
+                 "The download page will open now - install it, then start ROBOO again.")
+        webbrowser.open(WEBVIEW2_URL)
+        sys.exit(1)
+    try:
+        main()
+    except Exception:
+        # Never show a raw traceback dialog: save it, and say something useful.
+        import traceback
+        log = config.DATA_DIR / "error.log"
+        try:
+            config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            log.write_text(traceback.format_exc(), encoding="utf-8")
+        except OSError:
+            pass
+        _message("ROBOO could not start.\n\n"
+                 "Try: right-click the downloaded zip -> Properties -> tick 'Unblock' -> OK, "
+                 f"then extract it again.\n\nDetails were saved to:\n{log}")
+        sys.exit(1)
