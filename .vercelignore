@@ -1,0 +1,6 @@
+# Vercel hosts only the download page in docs/. The Python app (main.py,
+# core/, web/ ...) is a desktop program, not a web server - leaving it out
+# stops Vercel from trying to deploy it as a Python function.
+/*
+!docs
+!vercel.json
